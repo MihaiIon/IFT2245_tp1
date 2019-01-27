@@ -21,19 +21,20 @@ int main (void)
   size_t size;
   char *input = NULL;
   pid_t pid;
-
+  
+  char *command = NULL;
   //setvbuf(stdout, NULL, _IONBF, 0);
   while(bytes_read = getline(&input, &size, stdin)){
-    fprintf (stdout, "%% ");
     //parse the string
-
+    command = strtok(input, " ,\n");
     pid = fork();
     if(pid < 0){
       return 1;
     }
     else if(pid == 0) {
       //handling child process
-      execlp("ls","ls", NULL); 
+
+      execlp(command, command, NULL); 
       exit(0);
     }
     else{
@@ -41,6 +42,9 @@ int main (void)
       pid_t pid_return_val;
       int status;
       pid_return_val = wait(&status); //do something with return val
+
+      fprintf (stdout, "%% ");
+
     }
   }
   free(input);
