@@ -15,6 +15,7 @@ problèmes connus:
 void parseargs(char *input, char *args[]);
 int execute(char *args[]);
 int processcommand(char *args[], size_t *i);
+int processif(char *args[], size_t *i);
 
 int main (void)
 {
@@ -30,12 +31,12 @@ int main (void)
 
     parseargs(input, args); //split at spaces
 
-    for(size_t i = 0; i < sizeof(args); i++)
+    for(size_t k = 0; k < 64; k++)
     {
-      if(args[i] == NULL){
+      if(args[k] == NULL){
         break;
       }
-      printf("%ld Printing the input: %s\n", i, args[i]);
+      printf("%ld Printing the input: %s\n", k, args[k]);
     }
 
     size_t i = 0;
@@ -50,7 +51,7 @@ int main (void)
 void parseargs(char *input, char *args[]){
   char *token;
   char delim[] = " \n";
-  int i = 0;
+  size_t i = 0;
 
   token = strtok(input, delim);
 
@@ -78,7 +79,7 @@ int execute(char *args[]){
       execvp(args[0], args);
       //if execvp did not work
       printf("%s: command not found\n", args[0]);
-      exit(0);
+      exit(1);
     }
     else{
       //parent process
@@ -92,20 +93,30 @@ int processcommand(char *args[], size_t *i){
   int status = 0;
   size_t j = 0;
   char *tempcommand[64];
+  // for(size_t k = 0; k < 64; k++)
+  // {
+  //   if(args[k] == NULL){
+  //     break;
+  //   }
+  //   printf("%ld Processing this command: %s\n", k, args[k]);
+  // }
 
-  while (*i < sizeof(args)){
-
+  while (*i < 64){
     if (args[*i] == NULL){
       tempcommand[j] = args[*i];      
       status = execute(tempcommand);
       printf("Exit status : %d\n", status);
       return status;
+    } else if (strcmp(args[*i], "if") == 0){
+      (*i)++;
+      return processif(args,i);
     } else if (strcmp(args[*i], "&&") == 0){
+      
       tempcommand[j] = NULL; // set as null to process the command
       (*i)++;
       status = execute(tempcommand);
       if(status == 0){
-        //l'operation en cours a fonctionné donc on continue
+        //AND case, continue on success
         return processcommand(args, i);
       }
     } else if (strcmp(args[*i], "||") == 0){
@@ -113,16 +124,85 @@ int processcommand(char *args[], size_t *i){
       (*i)++;
       status = execute(tempcommand);
       if(status != 0){
-        //l'operation n'a pas fonctionné donc on continue
+        //OR case, continue on fail
         return processcommand(args, i);
       }
+      break;
     } else {
       tempcommand[j] = args[*i];
       (*i)++;
       j++;
     }
   }
-  
   return status;
-
 }
+
+int processif(char *args[], size_t *i){
+  int status = 1;
+  int condstatement = 0;
+  size_t j = 0;
+  char *condcommand[64];
+  char *docommand[64];
+
+  // size_t k = *i;
+  // for(;k < 64; k++)
+  // {
+  //   if(args[k] == NULL){
+  //     break;
+  //   }
+  //   printf("%ld Printing args: %s\n", k, args[k]);
+  // }
+
+  while (*i < 64){
+    if (strcmp(args[*i], "if") == 0){
+      (*i)++;
+      condstatement = processif(args, i); //conditionnal block is a if
+      break;
+    } else if (strcmp(args[*i], ";") == 0) {
+      (*i)++;
+      condcommand[j] = NULL;
+      size_t tempindex = 0;
+      condstatement = processcommand(condcommand, &tempindex);
+      break;
+    } else {
+      condcommand[j] = args[*i];
+      (*i)++;
+      j++;
+    }
+  }
+  j = 0;
+
+  //skip ahead to "do" in case some instructions were skipped
+  while(strcmp(args[*i], "do") != 0){
+    (*i)++;
+  }
+
+  //"do" statement
+  if(condstatement == 0 && strcmp(args[*i], "do") == 0){
+    (*i)++;
+    while (*i < 64){
+      if (strcmp(args[*i], "if") == 0){
+        (*i)++;
+        return processif(args,i);
+      } else if (strcmp(args[*i], ";") == 0) {
+        (*i)++;
+        docommand[j] = NULL;
+        size_t tempindex = 0;
+        status = processcommand(docommand, &tempindex);
+        break;
+      } else {
+        docommand[j] = args[*i];
+        (*i)++;
+        j++;
+      }
+    }
+    if (strcmp(args[*i], "done") != 0){
+      //syntax error
+      (*i)++;
+      return 1;
+    }
+    (*i)++;
+    return status;
+  }
+}
+
