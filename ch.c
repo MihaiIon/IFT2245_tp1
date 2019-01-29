@@ -14,6 +14,7 @@ problèmes connus:
 
 void parseargs(char *input, char *args[]);
 int execute(char *args[]);
+int processcommand(char *args[], size_t *i);
 
 int main (void)
 {
@@ -22,113 +23,25 @@ int main (void)
   int bytes_read;
   size_t size;
   char *input = NULL;
-  pid_t pid;
   
-  char *command = NULL;
-
   //setvbuf(stdout, NULL, _IONBF, 0);
   while(bytes_read = getline(&input, &size, stdin)){
-    //parse the string
     char *args[64];
 
     parseargs(input, args); //split at spaces
+
     for(size_t i = 0; i < sizeof(args); i++)
     {
       if(args[i] == NULL){
         break;
       }
-      printf("%dl Printing the input: %s\n", i, args[i]);
+      printf("%ld Printing the input: %s\n", i, args[i]);
     }
-    
-    // if(args[0] != NULL){
-    //   printf("%s\n",args[0]);
-    // }
 
-    //master loop for one input
     size_t i = 0;
-    size_t maxargs = sizeof(args);
-    int status;
+    processcommand(args,&i);
 
-
-    while(i < maxargs){
-      printf("loop start %d\n", i);
-      char *tempcommand[64];
-      int andflag = 0;
-      int orflag = 0;
-      size_t j = 0;
-      for(;;j++)
-      {
-        if(args[i] == NULL){
-          printf("null\n");
-          tempcommand[j] = args[i];
-          //NULL signifies the end of the input
-          i = maxargs;
-          break;
-        }
-        if(strcmp(args[i], "&&") == 0){
-          //command is over
-          printf("AND\n");
-          andflag = 1;
-          tempcommand[j] = NULL; // set as null to process the command
-          i++;
-          break;
-        }
-        if(strcmp(args[i], "||") == 0){
-          //command is over
-          printf("OR\n");
-          orflag = 1;
-          tempcommand[j] = NULL; // set as null to process the command
-          i++;
-          break;
-        }
-        tempcommand[i] = args[i];
-        printf("copy %s\n", args[i]);
-        i++;
-      }
-      printf("after for\n");
-
-      for(size_t k = 0; k < sizeof(tempcommand); k++)
-      {        
-        if(tempcommand[k] == NULL){
-          break;
-        }
-        printf("%d Printing tempcommand : %s\n", k,tempcommand[k]);
-
-      }
-      
-      status = execute(tempcommand);
-      if(andflag && status != 0){
-        //l'operation n'a pas fonctionné
-        break;
-      }
-      else if(orflag && status == 0){
-        //on est dans un OR on continue jusqua un succes
-        break;
-      }
-      printf("Exit status : %d\n", status);
-    }
     fprintf (stdout, "%% ");
-    
-    // command = tempcommand[0]; //tempcommand[0] contains the command and filename
-
-    // pid = fork();
-    // if(pid < 0){
-    //   return 1;
-    // }
-    // else if(pid == 0) {
-    //   //handling child process
-    //   execvp(command, tempcommand);
-    //   //if execvp did not work
-    //   printf("%s: command not found\n", command);
-    //   exit(0);
-    // }
-    // else{
-    //   //parent process
-    //   pid_t pid_return_val;
-    //   int status;
-    //   pid_return_val = wait(&status); //do something with return value
-    //   fprintf (stdout, "%% ");
-    // }
   }
   fprintf (stdout, "Bye!\n");
   exit (0);
@@ -169,7 +82,47 @@ int execute(char *args[]){
     }
     else{
       //parent process
-      pid_return_val = wait(&status); //do something with return value
+      pid_return_val = wait(&status);
     }
+
     return status;//return the child process status
+}
+
+int processcommand(char *args[], size_t *i){
+  int status = 0;
+  size_t j = 0;
+  char *tempcommand[64];
+
+  while (*i < sizeof(args)){
+
+    if (args[*i] == NULL){
+      tempcommand[j] = args[*i];      
+      status = execute(tempcommand);
+      printf("Exit status : %d\n", status);
+      return status;
+    } else if (strcmp(args[*i], "&&") == 0){
+      tempcommand[j] = NULL; // set as null to process the command
+      (*i)++;
+      status = execute(tempcommand);
+      if(status == 0){
+        //l'operation en cours a fonctionné donc on continue
+        return processcommand(args, i);
+      }
+    } else if (strcmp(args[*i], "||") == 0){
+      tempcommand[j] = NULL; // set as null to process the command
+      (*i)++;
+      status = execute(tempcommand);
+      if(status != 0){
+        //l'operation n'a pas fonctionné donc on continue
+        return processcommand(args, i);
+      }
+    } else {
+      tempcommand[j] = args[*i];
+      (*i)++;
+      j++;
+    }
+  }
+  
+  return status;
+
 }
