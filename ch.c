@@ -14,10 +14,11 @@ problèmes connus:
 #include <fcntl.h> 
 
 void parseargs(char *input, char *args[]);
-int processinput(char *args[]);
-int execute(char *args[], int isbackground, int hasredirect, char *fname);
-int processcommand(char *args[], size_t *i, int isbackground);
-int processif(char *args[], size_t *i, int isbackground);
+int processinput(char *args[], int size);
+int execute(char *args[], int size, int isbackground, int hasredirect, char *fname);
+int processcommand(char *args[], int size, size_t *i, int isbackground);
+int processif(char *args[], int size, size_t *i, int isbackground);
+int spacecount(char *text);
 
 int main (void)
 {
@@ -27,21 +28,13 @@ int main (void)
   size_t size;
   char *input = NULL;
   
-  setvbuf(stdout, NULL, _IONBF, 0);
   while(bytes_read = getline(&input, &size, stdin)){
-    char *args[64];
+    int words = spacecount(input);
+    char *args[words];
 
     parseargs(input, args); //split at spaces
 
-    // for(size_t k = 0; k < 64; k++)
-    // {
-    //   if(args[k] == NULL){
-    //     break;
-    //   }
-    //   printf("%ld Printing the input: %s\n", k, args[k]);
-    // }
-
-    processinput(args);
+    processinput(args, words);
     fprintf (stdout, "%% ");
   }
   fprintf (stdout, "Bye!\n");
@@ -61,15 +54,13 @@ void parseargs(char *input, char *args[]){
     i++;
   }
   args[i] = NULL; //set the last args as NULL for execvp
-
   return;
 }
 
-int execute(char *args[], int isbackground, int hasredirect, char *fname){
+int execute(char *args[], int size, int isbackground, int hasredirect, char *fname){
     pid_t pid;
     pid_t pid_return_val;
     int status;
-
     pid = fork();
     if(pid < 0){
       return 1;
@@ -78,7 +69,7 @@ int execute(char *args[], int isbackground, int hasredirect, char *fname){
       //handling child process
       if(isbackground){
         setpgid(pid, 0);
-        exit(processinput(args));
+        exit(processinput(args, size));
       }
       if(hasredirect){
         int fd = open(fname, O_WRONLY | O_CREAT, 0600);
@@ -107,10 +98,10 @@ int execute(char *args[], int isbackground, int hasredirect, char *fname){
 
     return status; //return the child process status
 }
-int processinput(char *args[]){
+int processinput(char *args[], int size){
     
     int isbackground = 0;
-    for(size_t k = 0; k < 64; k++)
+    for(size_t k = 0; k < size; k++)
     {
       if(args[k] == NULL){
         break;
@@ -120,17 +111,17 @@ int processinput(char *args[]){
         break;
       }
     }
-    
+    printf("size = %d\n", size);
     size_t i = 0; 
-    return processcommand(args, &i, isbackground);
+    return processcommand(args, size, &i, isbackground);
 }
 
-int processcommand(char *args[], size_t *i, int isbackground){
+int processcommand(char *args[], int size, size_t *i, int isbackground){
   int status = 0;
   size_t j = 0;
-  char *tempcommand[64];
+  char *tempcommand[size];
 
-  // for(size_t k = 0; k < 64; k++)
+  // for(size_t k = 0; k < size; k++)
   // {
   //   if(args[k] == NULL){
   //     break;
@@ -138,48 +129,48 @@ int processcommand(char *args[], size_t *i, int isbackground){
   //   printf("%ld Processing this command: %s\n", k, args[k]);
   // }
 
-  while (*i < 64){
-
+  while (*i < size){
     if (args[*i] == NULL){
+
       tempcommand[j] = args[*i];      
-      status = execute(tempcommand, isbackground, 0, NULL);
+      status = execute(tempcommand, size, isbackground, 0, NULL);
       // printf("Exit status : %d\n", status);
       return status;
 
     } else if (strcmp(args[*i], "if") == 0 && !isbackground){
       (*i)++;
-      return processif(args, i, isbackground);
+      return processif(args, size, i, isbackground);
 
     } else if (strcmp(args[*i], "&&" ) == 0 && !isbackground){
       
       tempcommand[j] = NULL; // set as null to process the command
       (*i)++;
-      status = execute(tempcommand, isbackground, 0, NULL);
+      status = execute(tempcommand, size, isbackground, 0, NULL);
       if(status == 0){
         //AND case, continue on success
-        return processcommand(args, i, isbackground);
+        return processcommand(args, size, i, isbackground);
       }
     } else if (strcmp(args[*i], "||") == 0 && !isbackground){
       tempcommand[j] = NULL; // set as null to process the command
       (*i)++;
-      status = execute(tempcommand, isbackground, 0, NULL);
+      status = execute(tempcommand, size, isbackground, 0, NULL);
       if(status != 0){
         //OR case, continue on fail
-        return processcommand(args, i, isbackground);
+        return processcommand(args, size, i, isbackground);
       }
       break;
     } else if (strcmp(args[*i], "&") == 0){ 
       tempcommand[j] = NULL; // set as null to process the command
       (*i)++;
-      status = execute(tempcommand, isbackground, 0, NULL);
+      status = execute(tempcommand, size, isbackground, 0, NULL);
       break;
     } else if (strcmp(args[*i], ">") == 0 && !isbackground){ 
       tempcommand[j] = NULL;
       (*i)++;
       //next string is the filename
-      status = execute(tempcommand, isbackground, 1, args[(*i)++]);
-      return processcommand(args, i, isbackground);
-    }else {
+      status = execute(tempcommand, size, isbackground, 1, args[(*i)++]);
+      return processcommand(args, size, i, isbackground);
+    } else {
       tempcommand[j] = args[*i];
       (*i)++;
       j++;
@@ -188,15 +179,15 @@ int processcommand(char *args[], size_t *i, int isbackground){
   return status;
 }
 
-int processif(char *args[], size_t *i, int isbackground){
+int processif(char *args[], int size, size_t *i, int isbackground){
   int status = 1;
   int condstatement = 0;
   size_t j = 0;
-  char *condcommand[64];
-  char *docommand[64];
+  char *condcommand[size];
+  char *docommand[size];
 
   // size_t k = *i;
-  // for(;k < 64; k++)
+  // for(;k < size; k++)
   // {
   //   if(args[k] == NULL){
   //     break;
@@ -204,16 +195,16 @@ int processif(char *args[], size_t *i, int isbackground){
   //   printf("%ld Printing args: %s\n", k, args[k]);
   // }
 
-  while (*i < 64){
+  while (*i < size){
     if (strcmp(args[*i], "if") == 0){
       (*i)++;
-      condstatement = processif(args, i, isbackground); //conditionnal block is a if
+      condstatement = processif(args, size, i, isbackground); //conditionnal block is a if
       break;
     } else if (strcmp(args[*i], ";") == 0) {
       (*i)++;
       condcommand[j] = NULL;
       size_t tempindex = 0;
-      condstatement = processcommand(condcommand, &tempindex, isbackground);
+      condstatement = processcommand(condcommand, size, &tempindex, isbackground);
       break;
     } else {
       condcommand[j] = args[*i];
@@ -231,15 +222,15 @@ int processif(char *args[], size_t *i, int isbackground){
   //"do" statement
   if(condstatement == 0 && strcmp(args[*i], "do") == 0){
     (*i)++;
-    while (*i < 64){
+    while (*i < size){
       if (strcmp(args[*i], "if") == 0){
         (*i)++;
-        return processif(args, i, isbackground);
+        return processif(args, size, i, isbackground);
       } else if (strcmp(args[*i], ";") == 0) {
         (*i)++;
         docommand[j] = NULL;
         size_t tempindex = 0;
-        status = processcommand(docommand, &tempindex, isbackground);
+        status = processcommand(docommand, size, &tempindex, isbackground);
         break;
       } else {
         docommand[j] = args[*i];
@@ -255,5 +246,16 @@ int processif(char *args[], size_t *i, int isbackground){
     (*i)++;
     return status;
   }
+}
+
+int spacecount(char *text){
+  int count = 2;
+  while(*text){
+    if(*text == ' '){
+      count++;
+    }
+    text++;
+  }
+  return count;
 }
 
