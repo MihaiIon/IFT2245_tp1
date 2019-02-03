@@ -10,11 +10,12 @@ problèmes connus:
 #include <stddef.h>
 #include <unistd.h> 
 #include <sys/wait.h> 
-#include <string.h> 
+#include <string.h>
+#include <fcntl.h> 
 
 void parseargs(char *input, char *args[]);
 void processinput(char *args[]);
-int execute(char *args[], int isbackground);
+int execute(char *args[], int isbackground, int hasredirect, char *fname);
 int processcommand(char *args[], size_t *i, int isbackground);
 int processif(char *args[], size_t *i, int isbackground);
 
@@ -64,7 +65,7 @@ void parseargs(char *input, char *args[]){
   return;
 }
 
-int execute(char *args[], int isbackground){
+int execute(char *args[], int isbackground, int hasredirect, char *fname){
     pid_t pid;
     pid_t pid_return_val;
     int status;
@@ -79,6 +80,16 @@ int execute(char *args[], int isbackground){
         printf("background child\n");
 
         setpgid(pid, 0);
+      }
+      if(hasredirect){
+        int fd = open(fname, O_WRONLY | O_CREAT, 0600);
+        if(fd < 0) {
+          //error handling
+          printf("file error\n");
+          exit(1);
+        }
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
       }
       execvp(args[0], args);
       //if execvp did not work
@@ -108,6 +119,8 @@ void processinput(char *args[]){
       }
       if(strcmp(args[k], "&") == 0){
         //everything will be in background
+        //TODO call un nouveau shell en background
+        //TODO gerer les args du shell
         isbackground = 1;
         break;
       }
@@ -132,19 +145,22 @@ int processcommand(char *args[], size_t *i, int isbackground){
   // }
 
   while (*i < 64){
+
     if (args[*i] == NULL){
       tempcommand[j] = args[*i];      
-      status = execute(tempcommand, isbackground);
+      status = execute(tempcommand, isbackground, 0, NULL);
       printf("Exit status : %d\n", status);
       return status;
+
     } else if (strcmp(args[*i], "if") == 0){
       (*i)++;
       return processif(args, i, isbackground);
+
     } else if (strcmp(args[*i], "&&") == 0){
       
       tempcommand[j] = NULL; // set as null to process the command
       (*i)++;
-      status = execute(tempcommand, isbackground);
+      status = execute(tempcommand, isbackground, 0, NULL);
       if(status == 0){
         //AND case, continue on success
         return processcommand(args, i, isbackground);
@@ -152,7 +168,7 @@ int processcommand(char *args[], size_t *i, int isbackground){
     } else if (strcmp(args[*i], "||") == 0){
       tempcommand[j] = NULL; // set as null to process the command
       (*i)++;
-      status = execute(tempcommand, isbackground);
+      status = execute(tempcommand, isbackground, 0, NULL);
       if(status != 0){
         //OR case, continue on fail
         return processcommand(args, i, isbackground);
@@ -161,8 +177,14 @@ int processcommand(char *args[], size_t *i, int isbackground){
     } else if (strcmp(args[*i], "&") == 0){ 
       tempcommand[j] = NULL; // set as null to process the command
       (*i)++;
-      status = execute(tempcommand, isbackground);
+      status = execute(tempcommand, isbackground, 0, NULL);
       break;
+    } else if (strcmp(args[*i], ">") == 0){ 
+      tempcommand[j] = NULL;
+      (*i)++;
+      //next string is the filename
+      status = execute(tempcommand, isbackground, 1, args[(*i)++]);
+      return processcommand(args, i, isbackground);
     }else {
       tempcommand[j] = args[*i];
       (*i)++;
