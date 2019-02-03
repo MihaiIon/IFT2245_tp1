@@ -111,7 +111,6 @@ int processinput(char *args[], int size){
         break;
       }
     }
-    printf("size = %d\n", size);
     size_t i = 0; 
     return processcommand(args, size, &i, isbackground);
 }
@@ -121,20 +120,11 @@ int processcommand(char *args[], int size, size_t *i, int isbackground){
   size_t j = 0;
   char *tempcommand[size];
 
-  // for(size_t k = 0; k < size; k++)
-  // {
-  //   if(args[k] == NULL){
-  //     break;
-  //   }
-  //   printf("%ld Processing this command: %s\n", k, args[k]);
-  // }
-
   while (*i < size){
     if (args[*i] == NULL){
 
       tempcommand[j] = args[*i];      
       status = execute(tempcommand, size, isbackground, 0, NULL);
-      // printf("Exit status : %d\n", status);
       return status;
 
     } else if (strcmp(args[*i], "if") == 0 && !isbackground){
@@ -186,19 +176,18 @@ int processif(char *args[], int size, size_t *i, int isbackground){
   char *condcommand[size];
   char *docommand[size];
 
-  // size_t k = *i;
-  // for(;k < size; k++)
-  // {
-  //   if(args[k] == NULL){
-  //     break;
-  //   }
-  //   printf("%ld Printing args: %s\n", k, args[k]);
-  // }
-
   while (*i < size){
     if (strcmp(args[*i], "if") == 0){
       (*i)++;
       condstatement = processif(args, size, i, isbackground); //conditionnal block is a if
+      break;
+    } else if (strcmp(args[*i], "true") == 0) {
+      condstatement = 0;
+      (*i)++;
+      break;
+    } else if (strcmp(args[*i], "false") == 0) {
+      condstatement = 1;
+      (*i)++;
       break;
     } else if (strcmp(args[*i], ";") == 0) {
       (*i)++;
