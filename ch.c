@@ -1,6 +1,6 @@
 /* ch.c.
-auteur:
-date:
+auteurs: Andre Langlais & Mihai Ionescu
+date: 8 fevrier 2019
 problèmes connus:
 
   */
@@ -12,36 +12,47 @@ problèmes connus:
 #include <sys/wait.h> 
 #include <string.h>
 #include <fcntl.h> 
-
-void parseargs(char *input, char *args[]);
-int processinput(char *args[], int size);
-int execute(char *args[], int size, int isbackground, int hasredirect, char *fname);
-int processcommand(char *args[], int size, size_t *i, int isbackground);
-int processif(char *args[], int size, size_t *i, int isbackground);
-int spacecount(char *text);
+/* isbg = boolean value for background processing*/
+/* isrd = boolean value for redirecting the output of an instruction
+*         to a specified file*/
+void parse_args(char *input, char *args[]);
+int process_input(char *args[], int size);
+int execute(char *args[], int size, int isbg, int hasrd, char *fname);
+int process_command(char *args[], int size, size_t *i, int isbg);
+int process_if(char *args[], int size, size_t *i, int isbg);
+int space_count(char *text);
 
 int main (void)
 {
   fprintf (stdout, "%% ");
   /* ¡REMPLIR-ICI! : Lire les commandes de l'utilisateur et les exécuter. */
-  int bytes_read;
   size_t size;
   char *input = NULL;
+  int bytes_read;
   
+  setvbuf(stdout, NULL, _IONBF, 0);
   while(bytes_read = getline(&input, &size, stdin)){
-    int words = spacecount(input);
+    if(bytes_read == -1){
+      break;
+    }
+    int words = space_count(input);
     char *args[words];
 
-    parseargs(input, args); //split at spaces
+    parse_args(input, args); /*split in an array of strings*/
+    process_input(args, words); /*process the command*/
 
-    processinput(args, words);
     fprintf (stdout, "%% ");
   }
   fprintf (stdout, "Bye!\n");
   exit (0);
 }
-
-void parseargs(char *input, char *args[]){
+/*
+* Function: parse_args
+* ----------------------
+* parses the input into an array of string
+* the input is splitted at spaces
+*/
+void parse_args(char *input, char *args[]){
   char *token;
   char delim[] = " \n";
   size_t i = 0;
@@ -56,8 +67,13 @@ void parseargs(char *input, char *args[]){
   args[i] = NULL; //set the last args as NULL for execvp
   return;
 }
-
-int execute(char *args[], int size, int isbackground, int hasredirect, char *fname){
+/*
+* Function: execute
+* ----------------------
+* executes an instruction using exevp
+* returns: the status as an int
+*/
+int execute(char *args[], int size, int isbg, int hasrd, char *fname){
     pid_t pid;
     pid_t pid_return_val;
     int status;
@@ -66,15 +82,15 @@ int execute(char *args[], int size, int isbackground, int hasredirect, char *fna
       return 1;
     }
     else if(pid == 0) {
-      //handling child process
-      if(isbackground){
+      /*child process*/
+      if(isbg){
         setpgid(pid, 0);
-        exit(processinput(args, size));
+        exit(process_input(args, size));
       }
-      if(hasredirect){
+      if(hasrd){
         int fd = open(fname, O_WRONLY | O_CREAT, 0600);
         if(fd < 0) {
-          //error handling
+          /*error handling*/
           printf("file error\n");
           exit(1);
         }
@@ -82,85 +98,98 @@ int execute(char *args[], int size, int isbackground, int hasredirect, char *fna
         close(fd);
       }
       execvp(args[0], args);
-      //if execvp did not work
+      /*if execvp did not work*/
       printf("%s: command not found\n", args[0]);
       exit(1);
     }
     else{
-      //parent process
-      if(isbackground){
+      /*parent process*/
+      if(isbg){
         setpgid(pid, 0);
         pid_return_val = waitpid(0, &status, WNOHANG);
       } else{
         pid_return_val = waitpid(pid, &status, WUNTRACED); 
       }
     }
-
-    return status; //return the child process status
+    return status;
 }
-int processinput(char *args[], int size){
+/*
+* Function: process_input
+* ----------------------
+* entry points of the processing engine
+* returns: the status of an instruction
+*/
+int process_input(char *args[], int size){
     
-    int isbackground = 0;
+    int isbg = 0; /*indicate if an instruction 
+                   will be processed in background*/
     for(size_t k = 0; k < size; k++)
     {
       if(args[k] == NULL){
         break;
       }
       if(strcmp(args[k], "&") == 0){
-        isbackground = 1;
+        isbg = 1;
         break;
       }
     }
     size_t i = 0; 
-    return processcommand(args, size, &i, isbackground);
+    return process_command(args, size, &i, isbg);
 }
-
-int processcommand(char *args[], int size, size_t *i, int isbackground){
+/*
+* Function: process_command
+* ----------------------
+* recursively parses the instruction word by word applying 
+* a different treatement on key elements
+* returns: return status of an instruction
+*/
+int process_command(char *args[], int size, size_t *i, int isbg){
   int status = 0;
   size_t j = 0;
   char *tempcommand[size];
 
   while (*i < size){
     if (args[*i] == NULL){
-
+      /*End of the user input*/
       tempcommand[j] = args[*i];      
-      status = execute(tempcommand, size, isbackground, 0, NULL);
+      status = execute(tempcommand, size, isbg, 0, NULL);
       return status;
 
-    } else if (strcmp(args[*i], "if") == 0 && !isbackground){
+    } else if (strcmp(args[*i], "if") == 0 && !isbg){
       (*i)++;
-      return processif(args, size, i, isbackground);
+      return process_if(args, size, i, isbg);
 
-    } else if (strcmp(args[*i], "&&" ) == 0 && !isbackground){
+    } else if (strcmp(args[*i], "&&" ) == 0 && !isbg){
       
-      tempcommand[j] = NULL; // set as null to process the command
+      tempcommand[j] = NULL; /*set as NULL for execvp*/
       (*i)++;
-      status = execute(tempcommand, size, isbackground, 0, NULL);
+      status = execute(tempcommand, size, isbg, 0, NULL);
       if(status == 0){
-        //AND case, continue on success
-        return processcommand(args, size, i, isbackground);
+        /*AND case, continue on success*/
+        return process_command(args, size, i, isbg);
       }
-    } else if (strcmp(args[*i], "||") == 0 && !isbackground){
-      tempcommand[j] = NULL; // set as null to process the command
+    } else if (strcmp(args[*i], "||") == 0 && !isbg){
+      tempcommand[j] = NULL; /*set as NULL for execvp*/
       (*i)++;
-      status = execute(tempcommand, size, isbackground, 0, NULL);
+      status = execute(tempcommand, size, isbg, 0, NULL);
       if(status != 0){
-        //OR case, continue on fail
-        return processcommand(args, size, i, isbackground);
+        /*OR case, continue on fail*/
+        return process_command(args, size, i, isbg);
       }
       break;
     } else if (strcmp(args[*i], "&") == 0){ 
-      tempcommand[j] = NULL; // set as null to process the command
+      tempcommand[j] = NULL; /*set as NULL for execvp*/
       (*i)++;
-      status = execute(tempcommand, size, isbackground, 0, NULL);
+      status = execute(tempcommand, size, isbg, 0, NULL);
       break;
-    } else if (strcmp(args[*i], ">") == 0 && !isbackground){ 
+    } else if (strcmp(args[*i], ">") == 0 && !isbg){ 
       tempcommand[j] = NULL;
       (*i)++;
-      //next string is the filename
-      status = execute(tempcommand, size, isbackground, 1, args[(*i)++]);
-      return processcommand(args, size, i, isbackground);
+      /*next string must be the file name*/
+      status = execute(tempcommand, size, isbg, 1, args[(*i)++]);
+      return process_command(args, size, i, isbg);
     } else {
+      /*standard case, copy the string*/
       tempcommand[j] = args[*i];
       (*i)++;
       j++;
@@ -168,18 +197,24 @@ int processcommand(char *args[], int size, size_t *i, int isbackground){
   }
   return status;
 }
-
-int processif(char *args[], int size, size_t *i, int isbackground){
+/*
+* Function: process_if
+* ----------------------
+* parses an if-statement, 
+* calls itself if it find another if-statement
+* returns: return status of the the instruction in the body
+*/
+int process_if(char *args[], int size, size_t *i, int isbg){
   int status = 1;
-  int condstatement = 0;
+  int condstatement = 0; /*conditionnal statement*/
   size_t j = 0;
-  char *condcommand[size];
-  char *docommand[size];
+  char *condcommand[size]; /*command in the condtionnal statement*/
+  char *docommand[size]; /*command in the body*/
 
   while (*i < size){
     if (strcmp(args[*i], "if") == 0){
       (*i)++;
-      condstatement = processif(args, size, i, isbackground); //conditionnal block is a if
+      condstatement = process_if(args, size, i, isbg);
       break;
     } else if (strcmp(args[*i], "true") == 0) {
       condstatement = 0;
@@ -193,7 +228,7 @@ int processif(char *args[], int size, size_t *i, int isbackground){
       (*i)++;
       condcommand[j] = NULL;
       size_t tempindex = 0;
-      condstatement = processcommand(condcommand, size, &tempindex, isbackground);
+      condstatement = process_command(condcommand, size, &tempindex, isbg);
       break;
     } else {
       condcommand[j] = args[*i];
@@ -203,23 +238,24 @@ int processif(char *args[], int size, size_t *i, int isbackground){
   }
   j = 0;
 
-  //skip ahead to "do" in case some instructions were skipped
+  /*skip ahead to "do" in case some instructions were skipped*/
+  /*is needed when using "&&" or "||"*/
   while(strcmp(args[*i], "do") != 0){
     (*i)++;
   }
 
-  //"do" statement
+  /*body statement*/
   if(condstatement == 0 && strcmp(args[*i], "do") == 0){
     (*i)++;
     while (*i < size){
       if (strcmp(args[*i], "if") == 0){
         (*i)++;
-        return processif(args, size, i, isbackground);
+        return process_if(args, size, i, isbg);
       } else if (strcmp(args[*i], ";") == 0) {
         (*i)++;
         docommand[j] = NULL;
         size_t tempindex = 0;
-        status = processcommand(docommand, size, &tempindex, isbackground);
+        status = process_command(docommand, size, &tempindex, isbg);
         break;
       } else {
         docommand[j] = args[*i];
@@ -228,7 +264,7 @@ int processif(char *args[], int size, size_t *i, int isbackground){
       }
     }
     if (strcmp(args[*i], "done") != 0){
-      //syntax error
+      /*the word done must be included at the end of the instruction*/
       (*i)++;
       return 1;
     }
@@ -236,8 +272,13 @@ int processif(char *args[], int size, size_t *i, int isbackground){
     return status;
   }
 }
-
-int spacecount(char *text){
+/*
+* Function: space_count
+* ----------------------
+* count the number of spaces, which should be at least 
+* as big as the number of words
+*/
+int space_count(char *text){
   int count = 2;
   while(*text){
     if(*text == ' '){
