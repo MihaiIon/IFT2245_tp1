@@ -2,7 +2,7 @@
 
 \usepackage[utf8]{inputenc}
 
-\title{IFT2245 \mid Travail\ pratique\ \#1 }
+\title{IFT2245 $\mid$ Travail\ pratique\ \#1 }
 \author{Mihai Ionescu - \textbf{1012378} André Langlais - \textbf{20044886}}
 
 \begin{document}
@@ -35,7 +35,8 @@ Nous avons divisé cette section en plusieurs sous-sections pertinentes qui expl
 
 \subsection{Exécution d'une commande}
 
-Pour des raisons que nous ignorons toujours, nous avons constaté qu'il faut utiliser la fonction \emph{execvp} pour executer une commande, et ce, en lui passant \textbf{le nom de la commande} comme premier argument et comme premier élément du second argument (tableau d'arguments).
+Pour exécuter une commande, nous avons choisi d'utiliser \emph{exevp} afin de pouvoir passer un array contenant les options et paramètres tout en ayant accès au PATH.
+Pour des raisons que nous ignorons toujours, il faut lui passé \textbf{le nom de la commande} comme premier argument et comme premier élément du second argument (tableau d'arguments). Il y a sûrement une raison d'implémentation mais nous n'avons pas chercher plus loin.
 
 \subsection{Énoncés conditionnels}
 
@@ -54,9 +55,27 @@ Notre solution a été de traiter ces cas-là en premier. Donc en gros, nous év
 
 Pour découper adéquatement les expressions à partir de la chaîne de caractères fournie à notre programme, nous utilisons une approche récursive. À chaque appel, nous effectuons un ou plusieurs forks (dans le cas des $\&\&$ ou $||$) pour extraire les différentes expressions.
 \\\\
-Nous utilisons \textbf{strtok} pour sectionner une chaîne de caractères en plusieurs mots et nous procédons ensuite avec de petits algorithmes pour extraire chaque section de l’expression courante.
+Nous utilisons \textbf{strtok} pour sectionner l'entrée faite par l'utilisateur en un tableau contenant chaque mots et nous procédons ensuite avec de petits algorithmes pour extraire chaque section de l’expression courante. Cette extraction consiste a créer un sous-tableaux dans lequel la sous-expressions est copié. La tableau principale ainsi qu'un pointeur vers une valeur servant à faire son itération sont envoyés à chaque fonction afin de conserver le point où l'analyse est rendue. 
 \\\\
 Nos algorithmes ont certainement des failles, mais nous avons mis en place quelques vérifications pour assurer que notre programme détecte les entrées invalides. Cela étant dit, il se peut que certains cas ne soient pas couverts (cela entraînera des comportements inconnus).
+\\\\
+\subsection{Cas limite et décisions d'implémentation}
+Afin d'implémenter la shell, nous avons dù prendre quelques décisions. En se fiant à la syntaxe des exemples fournis dans l'énoncé, nous avons pris la décision de seulement gérer les cas où les mots-clés et les opérateurs sont séparés par des espaces.
+\\\\
+Ce cas est valide
+\begin{verbatim}
+ls && ls
+\end{verbatim}
+mais ce cas ne l'est pas.
+\begin{verbatim}
+ls&&ls
+\end{verbatim}
+Aussi, nous avons décider de ne pas gérer le cas de l'utilisation du mot clé \emph{if} comme paramètre dans une instruction. L'exemple suivant ne fonctionne pas:
+\begin{verbatim}
+echo if
+\end{verbatim}
+Étant donné que les mots clés true et false sont présent dans l'énoncé, nous avons choisi de les implémenter. Ils fonctionnent comme des status de retour de processus.
+Nous avons aussi implémenter l'utilisation de ctrl-D pour quitter le shell grâcement.
 
 \subsection{Gestion de la mémoire}
 
@@ -65,26 +84,27 @@ Comme il s’agit de notre premier programme en C, nous avons eu beaucoup de dif
 \begin{verbatim}
   If true ; then ls -la ; done    
 \end{verbatim}
-\\\\
+\leavevmode
 …est découpée récursivement en plusieurs tableaux. 
-\\\\
+\leavevmode
 Par exemple, nous aurions ici :
 \begin{verbatim}
-  If true ; then ls -la ; done -> ["true", "ls -la"];
+  If true ; do ls -la ; done -> ["true", "ls -la"];
 \end{verbatim}
-\\\\
+\leavevmode
 Puis, avec la recursion :
 \begin{verbatim}
   ls -la ->  ["ls", "-la"]
 \end{verbatim}
-\\\\
+\leavevmode
 C’est bien beau tout ça, mais nous avons eu beaucoup de difficulté à libérer la mémoire récursivement. Nous avons tenté de gérer la mémoire allouée en sauvegardant l’adresse de chaque pointeur dans des tableaux que nous avons ensuite passé en paramètre récursivement.
 \\\\
 Le plus difficile dans tout cela a été de déboguer le code ...et nous n'avons malheureusement pas réussi à intégrer correctement l'allocation dynamique de la mémoire.
 \\\\
-Suite à quelques essais, nous avons finalement opté pour une solution simple : \textit{allouer un tableau de taille fixe au début de notre programme}.
+Suite à quelques essais, nous avons finalement opté pour une solution simple : \textit{allouer un tableau de taille fixe à chaque entrée faite par l'utilisateur}.
 \\\\
-Ce tableau contient un maximum de \textbf{64 tokens} et est utilisé à travers tout notre programme.
+La taille du tableau est en fait le nombre d'espace contenu dans la commande. Cela équivaut donc au nombre de tokens entrés par l'utilisateur ou plus. Cette taille est utilisé pour tous les sous-tableaux. En effet, aucun des sous-tableaux ne peut dépasser la taille de l'entrée donc aucun problème de taille n'est possible. Par contre, les sous-tableaux sont souvent plus grand que nécessaire.
+\\\\
 
 \section{Conclusion}
 
